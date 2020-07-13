@@ -57,6 +57,8 @@ class ExperiencedReplay(object):
         return sample_state_tf, sample_action_tf, sample_reward_tf, sample_new_state_tf, sample_done_tf
 
     def save(self):
+        if self.state_buffer is None:
+            return
         np.save(f"{self.checkpoint_path}/state_buffer.npy", self.state_buffer)
         np.save(f"{self.checkpoint_path}/action_buffer.npy", self.action_buffer)
         np.save(f"{self.checkpoint_path}/reward_buffer.npy", self.reward_buffer)

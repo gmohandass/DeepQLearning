@@ -145,6 +145,7 @@ class Agent(object):
                 self.learn()
                 if (episode % self.target_update_freq == 0) & (step == 1):
                     print("Updated target Q network")
+                    self.replay_buffer.save()
                     self.target_q_network.update_weights(self.q_network.model.get_weights())
 
                 self.show_state(env, action, action_type, self.get_epsilon(episode), rewards, episode, step)
@@ -160,7 +161,6 @@ class Agent(object):
 
             self.q_network.checkpoint(episode)
             self.target_q_network.checkpoint(episode)
-            self.replay_buffer.save()
             self.q_network.loss.reset_states()
 
         self.env.close()
