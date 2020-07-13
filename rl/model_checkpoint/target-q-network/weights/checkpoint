@@ -1,2 +1,2 @@
-model_checkpoint_path: "weights_episode_180"
-all_model_checkpoint_paths: "weights_episode_180"
+model_checkpoint_path: "weights_episode_220"
+all_model_checkpoint_paths: "weights_episode_220"

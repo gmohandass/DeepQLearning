@@ -10,13 +10,14 @@ import matplotlib.pyplot as plt
 
 class Agent(object):
     def __init__(self, env,
-                 total_episodes=200,
-                 total_steps=200,
+                 total_episodes=300,
+                 total_steps=201,
                  training_batch_size=128,
                  max_buffer_size=20000,
                  learning_rate=0.001,
                  target_update_freq=10,
-                 gamma=0.99):
+                 gamma=0.99,
+                 ddq=True):
 
         self.env = env
         self.total_episodes: int = total_episodes
@@ -26,23 +27,25 @@ class Agent(object):
         self.num_inputs, self.num_actions = self.env.observation_space.shape[0] + 1, self.env.action_space.n
         self.q_network = ActionValueNetwork(self.num_inputs, self.num_actions, learning_rate, "Q-Network", log=True)
         self.target_q_network = ActionValueNetwork(self.num_inputs, self.num_actions, learning_rate, "Target-Q-Network")
+        self.batch_size = training_batch_size
         self.replay_buffer = ExperiencedReplay(max_buffer_size, training_batch_size)
         self.avg_rewards = []
+        self.ddq = ddq
 
     def get_epsilon(self, episode):
         episode_percent = episode / self.total_episodes
         if episode_percent > 0.5:
             return 0.1
-        # elif episode_percent > 0.7:
-        #     return 0.2
-        # elif episode_percent > 0.5:
-        #     return 0.4
-        # elif episode_percent > 0.3:
-        #     return 0.6
-        # elif episode_percent > 0.1:
-        #     return 0.8
+        elif episode_percent > 0.7:
+            return 0.2
+        elif episode_percent > 0.5:
+            return 0.4
+        elif episode_percent > 0.3:
+            return 0.6
+        elif episode_percent > 0.1:
+            return 0.8
         else:
-            return 0.7
+            return 1.0
 
     @staticmethod
     def normalize(obs, time):
@@ -93,12 +96,25 @@ class Agent(object):
         sample_state, sample_action, sample_reward, sample_new_state, sample_done = self.replay_buffer.sample()
         sample_actions_encoded = tf.squeeze(tf.one_hot(sample_action, self.num_actions, on_value=1.0, off_value=0.0))
 
-        future_q_val = tf.expand_dims(tf.reduce_max(self.target_q_network.predict(sample_new_state), axis=1), axis=1)
-        target_q = sample_reward + (self.gamma * future_q_val * (1 - sample_done))
+        if not self.ddq:
+            future_q_val = tf.expand_dims(tf.reduce_max(self.target_q_network.predict(sample_new_state),
+                                                        axis=1), axis=1)
+            target_q = sample_reward + (self.gamma * future_q_val * (1 - sample_done))
 
-        with tf.GradientTape() as tape:
-            q_pred = tf.reduce_sum(self.q_network.predict(sample_state) * sample_actions_encoded, axis=-1)
-            loss = tf.keras.losses.MSE(target_q, q_pred)
+            with tf.GradientTape() as tape:
+                q_pred = tf.reduce_sum(self.q_network.predict(sample_state) * sample_actions_encoded, axis=-1)
+                loss = tf.keras.losses.MSE(target_q, q_pred)
+
+        else:
+            with tf.GradientTape() as tape:
+                q = self.q_network.predict(sample_state)
+                q_target = self.target_q_network.predict(sample_new_state)
+                q_actions = tf.argmax(q, axis=-1)
+                q_actions_encodes = q_actions + tf.cast(tf.range(0, q_actions.shape[0]), dtype=tf.int64) * q_target.shape[-1]
+                q_pred_target = tf.gather(tf.reshape(q_target, [-1]), q_actions_encodes)
+                y = sample_reward + (self.gamma * q_pred_target * (1-sample_done))
+                q_pred = tf.reduce_sum(q * sample_actions_encoded, axis=-1)
+                loss = tf.keras.losses.MSE(y, q_pred)
 
         grads = tape.gradient(loss, self.q_network.model.trainable_weights)
         self.q_network.optimizer.apply_gradients(zip(grads, self.q_network.model.trainable_weights))
@@ -127,7 +143,7 @@ class Agent(object):
                 current_state = new_state
                 rewards.append(reward)
                 self.learn()
-                if episode % self.target_update_freq == 0 & step == 1:
+                if (episode % self.target_update_freq == 0) & (step == 1):
                     print("Updated target Q network")
                     self.target_q_network.update_weights(self.q_network.model.get_weights())
 
@@ -144,6 +160,7 @@ class Agent(object):
 
             self.q_network.checkpoint(episode)
             self.target_q_network.checkpoint(episode)
+            self.replay_buffer.save()
             self.q_network.loss.reset_states()
 
         self.env.close()
@@ -152,7 +169,7 @@ class Agent(object):
 if __name__ == '__main__':
     env = gym.make('MountainCar-v0')
     agent = Agent(env,
-                  total_episodes=200,
+                  total_episodes=300,
                   total_steps=201,
                   training_batch_size=128,
                   max_buffer_size=20000,

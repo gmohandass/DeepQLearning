@@ -1,3 +1,5 @@
+import os
+
 import numpy as np
 import tensorflow as tf
 
@@ -6,11 +8,13 @@ class ExperiencedReplay(object):
     def __init__(self, buffer_size, batch_size):
         self.buffer_size = buffer_size
         self.batch_size = batch_size
+        self.checkpoint_path = "experience_checkpoint"
         self.state_buffer = None
         self.action_buffer = None
         self.reward_buffer = None
         self.new_state_buffer = None
         self.done_buffer = None
+        self.load()
 
     @staticmethod
     def _concat(old_array, new_array):
@@ -51,3 +55,20 @@ class ExperiencedReplay(object):
         sample_done_tf = self._tf_tensor(self.done_buffer[idx, :])
         sample_new_state_tf = self._tf_tensor(self.new_state_buffer[idx, :])
         return sample_state_tf, sample_action_tf, sample_reward_tf, sample_new_state_tf, sample_done_tf
+
+    def save(self):
+        np.save(f"{self.checkpoint_path}/state_buffer.npy", self.state_buffer)
+        np.save(f"{self.checkpoint_path}/action_buffer.npy", self.action_buffer)
+        np.save(f"{self.checkpoint_path}/reward_buffer.npy", self.reward_buffer)
+        np.save(f"{self.checkpoint_path}/new_state_buffer.npy", self.new_state_buffer)
+        np.save(f"{self.checkpoint_path}/done_buffer.npy", self.done_buffer)
+
+    def load(self):
+        if not os.path.isfile(f"{self.checkpoint_path}/state_buffer.npy"):
+            return
+        self.state_buffer = np.load(f"{self.checkpoint_path}/state_buffer.npy")
+        self.action_buffer = np.save(f"{self.checkpoint_path}/action_buffer.npy")
+        self.reward_buffer = np.save(f"{self.checkpoint_path}/reward_buffer.npy")
+        self.new_state_buffer = np.save(f"{self.checkpoint_path}/new_state_buffer.npy")
+        self.done_buffer = np.save(f"{self.checkpoint_path}/done_buffer.npy")
+
